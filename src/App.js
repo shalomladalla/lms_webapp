@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   signOut
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, collection, addDoc, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, collection, addDoc, getDocs, getDoc } from 'firebase/firestore';
 
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
@@ -33,6 +33,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [authView, setAuthView] = useState('login');
   const [adminView, setAdminView] = useState('dashboard'); // State for admin navigation
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -61,7 +62,7 @@ const App = () => {
 
   // SIMPLIFIED: If a user is logged in, show the Admin Panel.
   if (user) {
-    return <AdminLayout setAdminView={setAdminView} adminView={adminView} handleLogout={handleLogout} />;
+    return <AdminLayout setAdminView={setAdminView} adminView={adminView} handleLogout={handleLogout} setSelectedStudentId={setSelectedStudentId} selectedStudentId={selectedStudentId} />;
   } else {
     return authView === 'login' ? <LoginPage onToggleView={toggleView} /> : <RegisterPage onToggleView={toggleView} />;
   }
@@ -71,7 +72,7 @@ const App = () => {
 // ADMIN COMPONENTS
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-const AdminLayout = ({ adminView, setAdminView, handleLogout }) => {
+const AdminLayout = ({ adminView, setAdminView, handleLogout, selectedStudentId, setSelectedStudentId }) => {
   const icons = {
       dashboard: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
       student: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
@@ -90,10 +91,13 @@ const AdminLayout = ({ adminView, setAdminView, handleLogout }) => {
   if (adminView === 'dashboard') {
     currentView = <AdminDashboard setAdminView={setAdminView} />;
   } else if (adminView === 'all_students') {
-    currentView = <AllStudentsPage setAdminView={setAdminView} />;
+    currentView = <AllStudentsPage setAdminView={setAdminView} setSelectedStudentId={setSelectedStudentId} />;
   } else if (adminView === 'enroll_student') {
     currentView = <EnrollStudentPage setAdminView={setAdminView} />;
-  } else {
+  } else if (adminView === 'student_profile') {
+    currentView = <StudentProfilePage setAdminView={setAdminView} studentId={selectedStudentId} />;
+  }
+  else {
     currentView = <AdminDashboard setAdminView={setAdminView} />;
   }
 
@@ -139,16 +143,17 @@ const AdminDashboard = ({ setAdminView }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card title="All Students" icon="🎓" onClick={() => setAdminView('all_students')} />
           <Card title="Enroll Student" icon="➕" onClick={() => setAdminView('enroll_student')} />
-          <Card title="Search a Student" icon="🔍" onClick={() => alert('Search a Student page is not yet implemented.')} />
+          <Card title="Search a Student" icon="🔍" onClick={() => setAdminView('all_students')} />
         </div>
       </div>
     </>
   );
 };
 
-const AllStudentsPage = ({ setAdminView }) => {
+const AllStudentsPage = ({ setAdminView, setSelectedStudentId }) => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -163,9 +168,17 @@ const AllStudentsPage = ({ setAdminView }) => {
         setLoading(false);
       }
     };
-
     fetchStudents();
   }, []);
+
+  const handleViewProfile = (studentId) => {
+    setSelectedStudentId(studentId);
+    setAdminView('student_profile');
+  };
+
+  const filteredStudents = students.filter(student =>
+    `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <>
@@ -182,7 +195,12 @@ const AllStudentsPage = ({ setAdminView }) => {
             <span className="absolute inset-y-0 left-0 flex items-center pl-3">
               <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             </span>
-            <input type="text" placeholder="Search by name..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+            <input 
+              type="text" 
+              placeholder="Search by name..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"/>
           </div>
           <select className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option>All Classes</option>
@@ -202,17 +220,17 @@ const AllStudentsPage = ({ setAdminView }) => {
             <tbody>
               {loading ? (
                 <tr><td colSpan="5" className="text-center p-4 text-gray-500">Loading students...</td></tr>
-              ) : students.length === 0 ? (
-                <tr><td colSpan="5" className="text-center p-4 text-gray-500">No students found. Enroll a student to get started.</td></tr>
+              ) : filteredStudents.length === 0 ? (
+                <tr><td colSpan="5" className="text-center p-4 text-gray-500">No students found.</td></tr>
               ) : (
-                students.map((student) => (
+                filteredStudents.map((student) => (
                   <tr key={student.id} className="border-b last:border-b-0 hover:bg-gray-50">
                     <td className="p-4 whitespace-nowrap">{student.firstName} {student.lastName}</td>
                     <td className="p-4 whitespace-nowrap">{student.class || 'N/A'}</td>
                     <td className="p-4 whitespace-nowrap">{student.email}</td>
                     <td className="p-4 whitespace-nowrap">{student.phone}</td>
                     <td className="p-4 text-right">
-                      <button className="text-blue-600 hover:text-blue-800">
+                      <button onClick={() => handleViewProfile(student.id)} className="text-blue-600 hover:text-blue-800">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       </button>
                     </td>
@@ -227,129 +245,218 @@ const AllStudentsPage = ({ setAdminView }) => {
   );
 };
 
-// FIX: Moved FormInput outside of EnrollStudentPage to prevent re-renders
 const FormInput = ({ name, label, type = 'text', required = false, placeholder = '', value, onChange }) => (
-  <div>
-    <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-    <input type={type} name={name} id={name} value={value} onChange={onChange} required={required} placeholder={placeholder}
-      className="block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-  </div>
-);
-
-const EnrollStudentPage = ({ setAdminView }) => {
-  const [formData, setFormData] = useState({
-    firstName: '', lastName: '', dob: '', gender: '', email: '', phone: '',
-    parentFullName: '', parentRelation: '', parentPhone: '', parentEmail: '',
-    class: '', section: '', previousSchool: '', aadhaarId: '',
-  });
-  const [imageFile, setImageFile] = useState(null);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prevState => ({ ...prevState, [name]: value }));
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setImageFile(e.target.files[0]);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      // NOTE: Image upload logic needs to be implemented.
-      // This will involve Firebase Storage.
-      await addDoc(collection(db, "students"), {
-        ...formData,
-        enrolledAt: new Date(),
-      });
-      alert('Student enrolled successfully!');
-      setAdminView('dashboard');
-    } catch (error) {
-      console.error("Error enrolling student: ", error);
-      alert('Failed to enroll student. Please check the console for errors.');
-    }
-  };
-
-  return (
-    <>
-      <header className="h-16 bg-white border-b border-gray-200 flex items-center px-8">
-        <h1 className="text-2xl font-bold text-gray-800">Enroll New Student</h1>
-      </header>
-      <div className="p-8">
-        <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-lg shadow-sm border border-gray-200">
-          
-          <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Student Information</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <FormInput name="firstName" label="First Name" placeholder="Enter first name" required value={formData.firstName} onChange={handleChange} />
-              <FormInput name="lastName" label="Last Name" placeholder="Enter last name" required value={formData.lastName} onChange={handleChange} />
-              <FormInput name="dob" label="Date of Birth" type="date" required value={formData.dob} onChange={handleChange} />
-              <div>
-                <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                <select id="gender" name="gender" value={formData.gender} onChange={handleChange} className="block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                  <option value="">Select gender</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <FormInput name="email" label="Email" type="email" placeholder="Enter email" value={formData.email} onChange={handleChange} />
-              <FormInput name="phone" label="Phone" type="tel" placeholder="Enter phone number" value={formData.phone} onChange={handleChange} />
-            </div>
-          </section>
-
-          <section className="sm:col-span-3">
-            <label htmlFor="photo" className="block text-sm font-medium text-gray-700 mb-1">Photo</label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-              <div className="space-y-1 text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                  <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <div className="flex text-sm text-gray-600">
-                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                    <span>Upload a file</span>
-                    <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
-                  </label>
-                  <p className="pl-1">or drag and drop</p>
-                </div>
-                <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Parent/Guardian Information</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <FormInput name="parentFullName" label="Full Name" placeholder="Enter parent's full name" value={formData.parentFullName} onChange={handleChange} />
-              <FormInput name="parentRelation" label="Relation" placeholder="e.g., Father, Mother" value={formData.parentRelation} onChange={handleChange} />
-              <FormInput name="parentPhone" label="Phone Number" placeholder="Enter phone number" value={formData.parentPhone} onChange={handleChange} />
-              <FormInput name="parentEmail" label="Email Address" type="email" placeholder="Enter email address" value={formData.parentEmail} onChange={handleChange} />
-            </div>
-          </section>
-          
-          <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Academic Information</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <FormInput name="class" label="Class" placeholder="e.g., Class 10" value={formData.class} onChange={handleChange} />
-              <FormInput name="section" label="Section" placeholder="e.g., A" value={formData.section} onChange={handleChange} />
-              <FormInput name="previousSchool" label="Previous School" placeholder="If applicable" value={formData.previousSchool} onChange={handleChange} />
-              <FormInput name="aadhaarId" label="Aadhaar ID" placeholder="Enter 12-digit ID" value={formData.aadhaarId} onChange={handleChange} />
-            </div>
-          </section>
-          
-          <div className="flex justify-end gap-4 pt-5 border-t">
-            <button type="button" onClick={() => setAdminView('dashboard')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
-            <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Enroll Student</button>
-          </div>
-        </form>
-      </div>
-    </>
+    <div>
+      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input type={type} name={name} id={name} value={value} onChange={onChange} required={required} placeholder={placeholder}
+        className="block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+    </div>
   );
+  
+const EnrollStudentPage = ({ setAdminView }) => {
+    const [formData, setFormData] = useState({
+      firstName: '', lastName: '', dob: '', gender: '', email: '', phone: '',
+      parentFullName: '', parentRelation: '', parentPhone: '', parentEmail: '',
+      class: '', section: '', previousSchool: '', aadhaarId: '',
+    });
+    const [imageFile, setImageFile] = useState(null);
+  
+    const handleChange = (e) => {
+      const { name, value } = e.target;
+      setFormData(prevState => ({ ...prevState, [name]: value }));
+    };
+  
+    const handleFileChange = (e) => {
+      if (e.target.files && e.target.files[0]) {
+        setImageFile(e.target.files[0]);
+      }
+    };
+  
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await addDoc(collection(db, "students"), { ...formData, enrolledAt: new Date() });
+        alert('Student enrolled successfully!');
+        setAdminView('dashboard');
+      } catch (error) {
+        console.error("Error enrolling student: ", error);
+        alert('Failed to enroll student.');
+      }
+    };
+  
+    return (
+        <>
+          <header className="h-16 bg-white border-b border-gray-200 flex items-center px-8">
+            <h1 className="text-2xl font-bold text-gray-800">Enroll New Student</h1>
+          </header>
+          <div className="p-8">
+            <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-lg shadow-sm border border-gray-200">
+              
+              <section>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Student Information</h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <FormInput name="firstName" label="First Name" placeholder="Enter first name" required value={formData.firstName} onChange={handleChange} />
+                  <FormInput name="lastName" label="Last Name" placeholder="Enter last name" required value={formData.lastName} onChange={handleChange} />
+                  <FormInput name="dob" label="Date of Birth" type="date" required value={formData.dob} onChange={handleChange} />
+                  <div>
+                    <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                    <select id="gender" name="gender" value={formData.gender} onChange={handleChange} className="block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                      <option value="">Select gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <FormInput name="email" label="Email" type="email" placeholder="Enter email" value={formData.email} onChange={handleChange} />
+                  <FormInput name="phone" label="Phone" type="tel" placeholder="Enter phone number" value={formData.phone} onChange={handleChange} />
+                </div>
+              </section>
+    
+              <section className="sm:col-span-3">
+                <label htmlFor="photo" className="block text-sm font-medium text-gray-700 mb-1">Photo</label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="space-y-1 text-center">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="flex text-sm text-gray-600">
+                      <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                        <span>Upload a file</span>
+                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
+                  </div>
+                </div>
+              </section>
+    
+              <section>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Parent/Guardian Information</h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <FormInput name="parentFullName" label="Full Name" placeholder="Enter parent's full name" value={formData.parentFullName} onChange={handleChange} />
+                  <FormInput name="parentRelation" label="Relation" placeholder="e.g., Father, Mother" value={formData.parentRelation} onChange={handleChange} />
+                  <FormInput name="parentPhone" label="Phone Number" placeholder="Enter phone number" value={formData.parentPhone} onChange={handleChange} />
+                  <FormInput name="parentEmail" label="Email Address" type="email" placeholder="Enter email address" value={formData.parentEmail} onChange={handleChange} />
+                </div>
+              </section>
+              
+              <section>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Academic Information</h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <FormInput name="class" label="Class" placeholder="e.g., Class 10" value={formData.class} onChange={handleChange} />
+                  <FormInput name="section" label="Section" placeholder="e.g., A" value={formData.section} onChange={handleChange} />
+                  <FormInput name="previousSchool" label="Previous School" placeholder="If applicable" value={formData.previousSchool} onChange={handleChange} />
+                  <FormInput name="aadhaarId" label="Aadhaar ID" placeholder="Enter 12-digit ID" value={formData.aadhaarId} onChange={handleChange} />
+                </div>
+              </section>
+              
+              <div className="flex justify-end gap-4 pt-5 border-t">
+                <button type="button" onClick={() => setAdminView('dashboard')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
+                <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Enroll Student</button>
+              </div>
+            </form>
+          </div>
+        </>
+      );
+  };
+  
+const StudentProfilePage = ({ studentId, setAdminView }) => {
+    const [studentData, setStudentData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('profile');
+  
+    useEffect(() => {
+      const fetchStudentData = async () => {
+        if (!studentId) return;
+        try {
+          const studentDocRef = doc(db, 'students', studentId);
+          const studentDocSnap = await getDoc(studentDocRef);
+          if (studentDocSnap.exists()) {
+            setStudentData(studentDocSnap.data());
+          } else {
+            console.log('No such student!');
+          }
+        } catch (error) {
+          console.error("Error fetching student data:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchStudentData();
+    }, [studentId]);
+  
+    if (loading) return <div className="p-8">Loading student profile...</div>;
+    if (!studentData) return <div className="p-8">Student not found.</div>;
+    
+    const ProfileDetail = ({ label, value }) => (
+        <div>
+            <p className="text-sm text-gray-500">{label}</p>
+            <p className="font-medium text-gray-800">{value || 'N/A'}</p>
+        </div>
+    );
+
+    return (
+        <div className="p-8">
+            <header className="mb-6">
+                <button onClick={() => setAdminView('all_students')} className="text-blue-600 mb-4 flex items-center">
+                    &larr; Back to Students
+                </button>
+                <div className="flex items-center space-x-4">
+                    <div className="w-24 h-24 bg-gray-200 rounded-full flex-shrink-0">
+                        {/* Image placeholder */}
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">{studentData.firstName} {studentData.lastName}</h1>
+                        <p className="text-gray-500">Student ID: {studentId.slice(0, 8)}</p>
+                    </div>
+                </div>
+            </header>
+
+            <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8">
+                    <button onClick={() => setActiveTab('profile')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'profile' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Profile</button>
+                    <button onClick={() => setActiveTab('academics')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'academics' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Academics</button>
+                    <button onClick={() => setActiveTab('fees')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'fees' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Fees & Financials</button>
+                </nav>
+            </div>
+            
+            <div className="mt-8">
+                {activeTab === 'profile' && (
+                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                           <ProfileDetail label="First Name" value={studentData.firstName} />
+                           <ProfileDetail label="Last Name" value={studentData.lastName} />
+                           <ProfileDetail label="Date of Birth" value={studentData.dob} />
+                           <ProfileDetail label="Gender" value={studentData.gender} />
+                           <ProfileDetail label="Phone Number" value={studentData.phone} />
+                           <ProfileDetail label="Email Address" value={studentData.email} />
+                           <ProfileDetail label="Parent Full Name" value={studentData.parentFullName} />
+                           <ProfileDetail label="Relation" value={studentData.parentRelation} />
+                        </div>
+                    </div>
+                )}
+                 {activeTab === 'academics' && <div>Academic records coming soon.</div>}
+                 {activeTab === 'fees' && <div>Fee records coming soon.</div>}
+            </div>
+
+             <div className="mt-8 bg-white p-6 rounded-lg shadow-sm border">
+                <h3 className="text-lg font-semibold mb-4">Attendance Tracking</h3>
+                <div className="flex space-x-8">
+                    <div>
+                        <p className="text-sm text-gray-500">Days Present</p>
+                        <p className="text-2xl font-bold text-green-600">150</p>
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-500">Days Absent</p>
+                        <p className="text-2xl font-bold text-red-600">5</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
-
-
+  
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // AUTHENTICATION COMPONENTS
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
