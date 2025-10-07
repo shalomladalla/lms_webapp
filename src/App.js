@@ -68,7 +68,7 @@ const AuthLogo = () => (
 );
 const AuthFormHeader = ({ type }) => (
     <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-800">Progresso</h1>
+        <h1 className="text-2xl font-bold text-gray-800">LMS_WebApp</h1>
         <p className="text-gray-500 mt-1">{type === 'login' ? 'Sign in to your account' : 'Create a new account'}</p>
     </div>
 );
@@ -83,13 +83,17 @@ const AuthFormInput = ({ id, type, label, value, onChange, placeholder }) => (
 const LoginForm = ({ onToggleView }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('student');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
+      // You can use the role value for further logic if needed
+      // Assign different IDs or handle role-specific login here
       await signInWithEmailAndPassword(auth, email, password);
+      // Optionally, store role in localStorage/session or context
     } catch (err) {
       setError('Failed to log in. Please check your credentials.');
       console.error("Login error:", err.message);
@@ -101,9 +105,25 @@ const LoginForm = ({ onToggleView }) => {
       <AuthFormInput id="email" type="email" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your.email@example.com" />
       <AuthFormInput id="password" type="password" label="Password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
       {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-      <div><button type="submit" className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-gray-800 hover:bg-gray-900 focus:outline-none">Login</button></div>
       <div className="flex justify-between items-center text-sm">
         <a href="#" className="font-medium text-blue-600 hover:text-blue-500">Forgot Password?</a>
+        <div className="flex items-center">
+          <label htmlFor="role" className="mr-2 text-gray-600">Login as:</label>
+          <select
+            id="role"
+            value={role}
+            onChange={e => setRole(e.target.value)}
+            className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            style={{ minWidth: '90px' }}
+          >
+            <option value="student">Student</option>
+            <option value="admin">Admin</option>
+            <option value="parent">Parent</option>
+          </select>
+        </div>
+      </div>
+      <div><button type="submit" className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-gray-800 hover:bg-gray-900 focus:outline-none">Login</button></div>
+      <div className="text-center text-sm">
         <p className="text-gray-600">Need an account? <button type="button" onClick={onToggleView} className="font-medium text-blue-600 hover:text-blue-500 focus:outline-none">Sign up</button></p>
       </div>
     </form>
@@ -113,7 +133,7 @@ const LoginForm = ({ onToggleView }) => {
 const LoginPage = ({ onToggleView }) => (
     <div className="min-h-screen bg-gray-100 flex font-sans">
       <div className="w-1/2 bg-blue-800 hidden lg:block"></div>
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8"><div className="max-w-md w-full"><div className="flex flex-col items-center"><AuthLogo /><AuthFormHeader type="login" /></div><LoginForm onToggleView={onToggleView} /><p className="text-center text-xs text-gray-400 mt-10">&copy; Powered by DFS</p></div></div>
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8"><div className="max-w-md w-full"><div className="flex flex-col items-center"><AuthLogo /><AuthFormHeader type="login" /></div><LoginForm onToggleView={onToggleView} /><p className="text-center text-xs text-gray-400 mt-10">&copy; Powered by LMS_WebApp  </p></div></div>
     </div>
 );
 
@@ -245,7 +265,7 @@ const DashboardPage = () => {
             <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
                 <div className="h-16 flex items-center px-4">
                     <div className="bg-indigo-600 p-2 rounded-lg mr-3">{icons.logo}</div>
-                    <span className="text-xl font-bold text-gray-800">Progresso</span>
+                    <span className="text-xl font-bold text-gray-800">LMS_WebApp</span>
                 </div>
                 <nav className="flex-1 px-4 py-4 space-y-2">
                     <SidebarNavItem icon={icons.dashboard} active>Dashboard</SidebarNavItem>
