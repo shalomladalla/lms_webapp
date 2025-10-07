@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 // Import the necessary functions from the Firebase SDK
 import { initializeApp } from "firebase/app";
-import { 
+import {
   getAuth,
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, collection, addDoc, getDocs } from 'firebase/firestore';
 
 // --- FIREBASE CONFIGURATION ---
-// User's actual project credentials have been inserted here.
 const firebaseConfig = {
   apiKey: "AIzaSyAM5fhzTSWEff4YbXIrrfeBc0YaVqNVteo",
   authDomain: "lms-webapp-9a28a.firebaseapp.com",
@@ -28,11 +27,12 @@ const db = getFirestore(app);
 // --- END OF FIREBASE CONFIGURATION ---
 
 
-// Main App component now acts as the router and state manager
+// Main App component
 const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authView, setAuthView] = useState('login');
+  const [adminView, setAdminView] = useState('dashboard'); // State for admin navigation
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -42,6 +42,15 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setAdminView('dashboard'); // Reset admin view on logout
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  };
+
   const toggleView = () => {
     setAuthView(currentView => (currentView === 'login' ? 'register' : 'login'));
   };
@@ -49,16 +58,300 @@ const App = () => {
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
-  
+
+  // SIMPLIFIED: If a user is logged in, show the Admin Panel.
   if (user) {
-    return <DashboardPage />;
+    return <AdminLayout setAdminView={setAdminView} adminView={adminView} handleLogout={handleLogout} />;
   } else {
     return authView === 'login' ? <LoginPage onToggleView={toggleView} /> : <RegisterPage onToggleView={toggleView} />;
   }
 };
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// AUTHENTICATION PAGE COMPONENTS
+// ADMIN COMPONENTS
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+const AdminLayout = ({ adminView, setAdminView, handleLogout }) => {
+  const icons = {
+      dashboard: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
+      student: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+      course: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v11.494m-9-5.747h18" /></svg>,
+      attendance: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>,
+      reports: <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-8M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+  };
+
+  const NavItem = ({ icon, label, isActive }) => (
+    <a href="#" className={`flex items-center px-4 py-2.5 text-gray-700 rounded-lg transition-colors duration-200 ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}>
+      {icon} <span className="ml-3">{label}</span>
+    </a>
+  );
+
+  let currentView;
+  if (adminView === 'dashboard') {
+    currentView = <AdminDashboard setAdminView={setAdminView} />;
+  } else if (adminView === 'all_students') {
+    currentView = <AllStudentsPage setAdminView={setAdminView} />;
+  } else if (adminView === 'enroll_student') {
+    currentView = <EnrollStudentPage setAdminView={setAdminView} />;
+  } else {
+    currentView = <AdminDashboard setAdminView={setAdminView} />;
+  }
+
+  return (
+    <div className="flex h-screen bg-gray-50 font-sans">
+      <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+        <div className="h-16 flex items-center justify-center border-b">
+          <h1 className="text-xl font-bold text-gray-800">Admin Panel</h1>
+        </div>
+        <nav className="flex-1 px-4 py-4 space-y-2">
+          <NavItem icon={icons.dashboard} label="Dashboard" isActive={adminView === 'dashboard-main'} />
+          <NavItem icon={icons.student} label="Student Management" isActive={adminView.includes('student') || adminView === 'dashboard'} />
+          <NavItem icon={icons.course} label="Course Management" isActive={adminView.includes('course')} />
+          <NavItem icon={icons.attendance} label="Attendance" isActive={adminView.includes('attendance')} />
+          <NavItem icon={icons.reports} label="Reports" isActive={adminView.includes('reports')} />
+        </nav>
+        <div className="px-4 py-4 border-t">
+          <button onClick={handleLogout} className="w-full text-left text-gray-700">Logout</button>
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto">
+        {currentView}
+      </main>
+    </div>
+  );
+};
+
+const AdminDashboard = ({ setAdminView }) => {
+  const Card = ({ title, icon, onClick }) => (
+    <div onClick={onClick} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center hover:shadow-lg hover:border-blue-500 cursor-pointer transition-all">
+      <div className="text-4xl mb-3">{icon}</div>
+      <h2 className="text-lg font-semibold text-gray-700">{title}</h2>
+    </div>
+  );
+
+  return (
+    <>
+      <header className="h-16 bg-white border-b border-gray-200 flex items-center px-8">
+        <h1 className="text-2xl font-bold text-gray-800">Student Management</h1>
+      </header>
+      <div className="p-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card title="All Students" icon="🎓" onClick={() => setAdminView('all_students')} />
+          <Card title="Enroll Student" icon="➕" onClick={() => setAdminView('enroll_student')} />
+          <Card title="Search a Student" icon="🔍" onClick={() => alert('Search a Student page is not yet implemented.')} />
+        </div>
+      </div>
+    </>
+  );
+};
+
+const AllStudentsPage = ({ setAdminView }) => {
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const studentsCollection = collection(db, 'students');
+        const studentSnapshot = await getDocs(studentsCollection);
+        const studentList = studentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setStudents(studentList);
+      } catch (error) {
+        console.error("Error fetching students: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
+
+  return (
+    <>
+      <header className="h-16 bg-white border-b border-gray-200 flex items-center px-8">
+        <button onClick={() => setAdminView('dashboard')} className="text-gray-600 hover:text-gray-900 mr-4 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+            Back
+        </button>
+        <h1 className="text-2xl font-bold text-gray-800">Students</h1>
+      </header>
+      <div className="p-8">
+        <div className="flex justify-between items-center mb-6">
+          <div className="relative w-1/3">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            </span>
+            <input type="text" placeholder="Search by name..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+          </div>
+          <select className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option>All Classes</option>
+          </select>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-gray-50">
+              <tr className="border-b border-gray-200">
+                <th className="p-4 font-semibold text-gray-600 uppercase tracking-wider text-sm">Name</th>
+                <th className="p-4 font-semibold text-gray-600 uppercase tracking-wider text-sm">Class</th>
+                <th className="p-4 font-semibold text-gray-600 uppercase tracking-wider text-sm">Email</th>
+                <th className="p-4 font-semibold text-gray-600 uppercase tracking-wider text-sm">Phone</th>
+                <th className="p-4"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="5" className="text-center p-4 text-gray-500">Loading students...</td></tr>
+              ) : students.length === 0 ? (
+                <tr><td colSpan="5" className="text-center p-4 text-gray-500">No students found. Enroll a student to get started.</td></tr>
+              ) : (
+                students.map((student) => (
+                  <tr key={student.id} className="border-b last:border-b-0 hover:bg-gray-50">
+                    <td className="p-4 whitespace-nowrap">{student.firstName} {student.lastName}</td>
+                    <td className="p-4 whitespace-nowrap">{student.class || 'N/A'}</td>
+                    <td className="p-4 whitespace-nowrap">{student.email}</td>
+                    <td className="p-4 whitespace-nowrap">{student.phone}</td>
+                    <td className="p-4 text-right">
+                      <button className="text-blue-600 hover:text-blue-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// FIX: Moved FormInput outside of EnrollStudentPage to prevent re-renders
+const FormInput = ({ name, label, type = 'text', required = false, placeholder = '', value, onChange }) => (
+  <div>
+    <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    <input type={type} name={name} id={name} value={value} onChange={onChange} required={required} placeholder={placeholder}
+      className="block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+  </div>
+);
+
+const EnrollStudentPage = ({ setAdminView }) => {
+  const [formData, setFormData] = useState({
+    firstName: '', lastName: '', dob: '', gender: '', email: '', phone: '',
+    parentFullName: '', parentRelation: '', parentPhone: '', parentEmail: '',
+    class: '', section: '', previousSchool: '', aadhaarId: '',
+  });
+  const [imageFile, setImageFile] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prevState => ({ ...prevState, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      // NOTE: Image upload logic needs to be implemented.
+      // This will involve Firebase Storage.
+      await addDoc(collection(db, "students"), {
+        ...formData,
+        enrolledAt: new Date(),
+      });
+      alert('Student enrolled successfully!');
+      setAdminView('dashboard');
+    } catch (error) {
+      console.error("Error enrolling student: ", error);
+      alert('Failed to enroll student. Please check the console for errors.');
+    }
+  };
+
+  return (
+    <>
+      <header className="h-16 bg-white border-b border-gray-200 flex items-center px-8">
+        <h1 className="text-2xl font-bold text-gray-800">Enroll New Student</h1>
+      </header>
+      <div className="p-8">
+        <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-lg shadow-sm border border-gray-200">
+          
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Student Information</h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <FormInput name="firstName" label="First Name" placeholder="Enter first name" required value={formData.firstName} onChange={handleChange} />
+              <FormInput name="lastName" label="Last Name" placeholder="Enter last name" required value={formData.lastName} onChange={handleChange} />
+              <FormInput name="dob" label="Date of Birth" type="date" required value={formData.dob} onChange={handleChange} />
+              <div>
+                <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                <select id="gender" name="gender" value={formData.gender} onChange={handleChange} className="block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                  <option value="">Select gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <FormInput name="email" label="Email" type="email" placeholder="Enter email" value={formData.email} onChange={handleChange} />
+              <FormInput name="phone" label="Phone" type="tel" placeholder="Enter phone number" value={formData.phone} onChange={handleChange} />
+            </div>
+          </section>
+
+          <section className="sm:col-span-3">
+            <label htmlFor="photo" className="block text-sm font-medium text-gray-700 mb-1">Photo</label>
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div className="space-y-1 text-center">
+                <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                  <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <div className="flex text-sm text-gray-600">
+                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                    <span>Upload a file</span>
+                    <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
+                  </label>
+                  <p className="pl-1">or drag and drop</p>
+                </div>
+                <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Parent/Guardian Information</h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <FormInput name="parentFullName" label="Full Name" placeholder="Enter parent's full name" value={formData.parentFullName} onChange={handleChange} />
+              <FormInput name="parentRelation" label="Relation" placeholder="e.g., Father, Mother" value={formData.parentRelation} onChange={handleChange} />
+              <FormInput name="parentPhone" label="Phone Number" placeholder="Enter phone number" value={formData.parentPhone} onChange={handleChange} />
+              <FormInput name="parentEmail" label="Email Address" type="email" placeholder="Enter email address" value={formData.parentEmail} onChange={handleChange} />
+            </div>
+          </section>
+          
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Academic Information</h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <FormInput name="class" label="Class" placeholder="e.g., Class 10" value={formData.class} onChange={handleChange} />
+              <FormInput name="section" label="Section" placeholder="e.g., A" value={formData.section} onChange={handleChange} />
+              <FormInput name="previousSchool" label="Previous School" placeholder="If applicable" value={formData.previousSchool} onChange={handleChange} />
+              <FormInput name="aadhaarId" label="Aadhaar ID" placeholder="Enter 12-digit ID" value={formData.aadhaarId} onChange={handleChange} />
+            </div>
+          </section>
+          
+          <div className="flex justify-end gap-4 pt-5 border-t">
+            <button type="button" onClick={() => setAdminView('dashboard')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
+            <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Enroll Student</button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+};
+
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// AUTHENTICATION COMPONENTS
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 const AuthLogo = () => (
@@ -83,17 +376,13 @@ const AuthFormInput = ({ id, type, label, value, onChange, placeholder }) => (
 const LoginForm = ({ onToggleView }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('student');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      // You can use the role value for further logic if needed
-      // Assign different IDs or handle role-specific login here
       await signInWithEmailAndPassword(auth, email, password);
-      // Optionally, store role in localStorage/session or context
     } catch (err) {
       setError('Failed to log in. Please check your credentials.');
       console.error("Login error:", err.message);
@@ -105,23 +394,6 @@ const LoginForm = ({ onToggleView }) => {
       <AuthFormInput id="email" type="email" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your.email@example.com" />
       <AuthFormInput id="password" type="password" label="Password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
       {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-      <div className="flex justify-between items-center text-sm">
-        <a href="#" className="font-medium text-blue-600 hover:text-blue-500">Forgot Password?</a>
-        <div className="flex items-center">
-          <label htmlFor="role" className="mr-2 text-gray-600">Login as:</label>
-          <select
-            id="role"
-            value={role}
-            onChange={e => setRole(e.target.value)}
-            className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            style={{ minWidth: '90px' }}
-          >
-            <option value="student">Student</option>
-            <option value="admin">Admin</option>
-            <option value="parent">Parent</option>
-          </select>
-        </div>
-      </div>
       <div><button type="submit" className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-gray-800 hover:bg-gray-900 focus:outline-none">Login</button></div>
       <div className="text-center text-sm">
         <p className="text-gray-600">Need an account? <button type="button" onClick={onToggleView} className="font-medium text-blue-600 hover:text-blue-500 focus:outline-none">Sign up</button></p>
@@ -133,11 +405,11 @@ const LoginForm = ({ onToggleView }) => {
 const LoginPage = ({ onToggleView }) => (
     <div className="min-h-screen bg-gray-100 flex font-sans">
       <div className="w-1/2 bg-blue-800 hidden lg:block"></div>
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8"><div className="max-w-md w-full"><div className="flex flex-col items-center"><AuthLogo /><AuthFormHeader type="login" /></div><LoginForm onToggleView={onToggleView} /><p className="text-center text-xs text-gray-400 mt-10">&copy; Powered by LMS_WebApp  </p></div></div>
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8"><div className="max-w-md w-full"><div className="flex flex-col items-center"><AuthLogo /><AuthFormHeader type="login" /></div><LoginForm onToggleView={onToggleView} /><p className="text-center text-xs text-gray-400 mt-10">&copy; Powered by LMS_WebApp</p></div></div>
     </div>
 );
 
-// --- Register Page (Now with Full Name) ---
+// --- Register Page ---
 const RegisterForm = ({ onToggleView }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -155,14 +427,13 @@ const RegisterForm = ({ onToggleView }) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
-      // Store user's full name and other info in Firestore
+
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         fullName: fullName,
         email: user.email,
         createdAt: new Date(),
-        enrolledCourses: []
+        role: 'student', // All new users are students by default
       });
     } catch (err) {
       setError('Failed to create an account. The email may already be in use.');
@@ -190,124 +461,5 @@ const RegisterPage = ({ onToggleView }) => (
     </div>
 );
 
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// NEW DYNAMIC DASHBOARD PAGE
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-const SidebarNavItem = ({ icon, children, active }) => (
-    <a href="#" className={`flex items-center px-4 py-2.5 text-gray-600 rounded-lg transition-colors duration-200 ${active ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'hover:bg-gray-100'}`}>
-        {icon} <span className="ml-3">{children}</span>
-    </a>
-);
-const StatCard = ({ icon, title, value, color }) => (
-    <div className={`flex items-center p-5 bg-${color}-100 rounded-xl`}>
-        <div className={`flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-lg bg-${color}-200 text-${color}-600`}>{icon}</div>
-        <div className="ml-4">
-            <p className="text-sm font-medium text-gray-500">{title}</p>
-            <p className="text-2xl font-bold text-gray-900">{value}</p>
-        </div>
-    </div>
-);
-
-const DashboardPage = () => {
-    const [userData, setUserData] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchUserData = async () => {
-            if (auth.currentUser) {
-                const userDocRef = doc(db, "users", auth.currentUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    setUserData(userDocSnap.data());
-                    setLoading(false); // Stop loading ONLY when data is successfully fetched
-                } else {
-                    // This handles the case where the user is authenticated but their data is missing from Firestore
-                    // (e.g., if the 'users' collection was cleared). We force a logout.
-                    console.error("User data not found in Firestore. Forcing logout.");
-                    handleLogout();
-                }
-            } else {
-                // If there's no current user for some reason, stop loading.
-                setLoading(false);
-            }
-        };
-        fetchUserData();
-    }, []);
-
-    const handleLogout = async () => {
-      try {
-        await signOut(auth);
-      } catch (error) {
-        console.error("Error signing out: ", error);
-      }
-    };
-
-    const icons = {
-        logo: <svg className="h-7 w-7 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5-10 5z" /></svg>,
-        dashboard: <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" /><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" /></svg>,
-        courses: <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 005.5 16c1.255 0 2.443-.29 3.5-.804V4.804zM14.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 0014.5 16c1.255 0 2.443-.29 3.5-.804V4.804A7.968 7.968 0 0014.5 4z" /></svg>,
-        settings: <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01-.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>,
-        logout: <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" /></svg>,
-        notification: <svg className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
-        enrolled: <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z" /></svg>,
-    };
-
-    if (loading) {
-        return <div className="min-h-screen flex items-center justify-center">Loading Dashboard...</div>;
-    }
-    
-    // Extract the first name for a personal welcome
-    const firstName = userData?.fullName?.split(' ')[0] || 'User';
-
-    return (
-        <div className="flex h-screen bg-gray-100 font-sans">
-            <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
-                <div className="h-16 flex items-center px-4">
-                    <div className="bg-indigo-600 p-2 rounded-lg mr-3">{icons.logo}</div>
-                    <span className="text-xl font-bold text-gray-800">LMS_WebApp</span>
-                </div>
-                <nav className="flex-1 px-4 py-4 space-y-2">
-                    <SidebarNavItem icon={icons.dashboard} active>Dashboard</SidebarNavItem>
-                    <SidebarNavItem icon={icons.courses}>My Courses</SidebarNavItem>
-                </nav>
-                <div className="px-4 py-4 space-y-2">
-                    <SidebarNavItem icon={icons.settings}>Settings</SidebarNavItem>
-                    <button onClick={handleLogout} className="flex items-center w-full text-left px-4 py-2.5 text-gray-600 rounded-lg transition-colors duration-200 hover:bg-gray-100">
-                        {icons.logout} <span className="ml-3">Logout</span>
-                    </button>
-                </div>
-            </aside>
-
-            <main className="flex-1 overflow-y-auto">
-                <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Welcome back, {firstName}!</h1>
-                        <p className="text-sm text-gray-500">Here's your learning dashboard for today.</p>
-                    </div>
-                    <div className="flex items-center space-x-6">
-                        <button className="p-2 rounded-full hover:bg-gray-100">{icons.notification}</button>
-                    </div>
-                </header>
-
-                <div className="p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                        <StatCard icon={icons.enrolled} title="Enrolled Courses" value={userData?.enrolledCourses?.length || 0} color="indigo" />
-                        {/* Placeholders for future functionality */}
-                        <StatCard icon={icons.enrolled} title="Courses Completed" value="0" color="green" />
-                        <StatCard icon={icons.enrolled} title="Pending Assignments" value="0" color="yellow" />
-                    </div>
-
-                    <h2 className="text-xl font-bold text-gray-800 mb-4">My Courses</h2>
-                    <div className="bg-white p-6 rounded-xl border border-gray-200">
-                        <p className="text-gray-600 text-center">You are not enrolled in any courses yet. Explore our course catalog to get started!</p>
-                    </div>
-                </div>
-            </main>
-        </div>
-    );
-};
-
 export default App;
-
 
